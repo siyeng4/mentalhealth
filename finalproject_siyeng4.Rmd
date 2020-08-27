@@ -1,0 +1,254 @@
+---
+title: "Stat 420: Final Project"
+author: "Spring 2019, Smruthi Iyengar (siyeng4)"
+date: "5/4/2019"
+output:
+  word_document: default
+  html_document: default
+  theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE)
+```
+
+```{r}
+library(readr)
+library(faraway)
+library(lmtest)
+Disease_Data <- read_csv("Downloads/Disease Data.csv")
+# removing not relevant row, the X1 column is just numbers (1-290)
+Disease_Data$X1 <- NULL
+#renaming disease severity column so its easier to work with
+Disease_Data$Disease_Severity <- Disease_Data$`Disease Severity`
+Disease_Data$`Disease Severity` <- NULL
+```
+##**Report Summary and Anyalysis Plan**
+In this Report, I'd like to see how different genes affect disease severity. The data set contains 290 observations and has 21 columns. I will first fit a linear regression model making Disease severity my y variable and the different genes as my x variables. Next, I will make a better model using only the x variables that were statistically significant in the first model. It should be noted that I will always use an alpha value of 0.05 in all of my tests for significance. I will make sure my model does not violate any of the assumption of linear regression. If it does violate any of the assumptions I will fix that. Once I have a model that has x variables that are statistically significant and do not violate any assumptions of linear regression, that will be my final model.
+
+#**Summary Statistics**
+
+```{r}
+summary(Disease_Data)
+```
+
+The variable for disease_severity has an average value of 2.19 and a median value of 2.84. The first and third quadriles are 1.7685 and 3.0518. This means that a majority of the values of disease severity are between 1.76 and 3.05. For the different genes, a majority of their values are between approximentally .80 and 1.30.
+
+```{r}
+library(purrr)
+library(tidyr)
+library(ggplot2)
+
+Disease_Data %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+
+```
+
+From the histogram, I see almost all of the data for disease_severity are between 0 and 5 and the max value is 14.6. All of the genes except F2R have almost off its data between 0 and 2. F2R has its data spread mostly between .50 and 1.5.
+
+#**Linear Regression**
+
+The response variable is disease_severity and the predictor variables are the different genes.
+
+```{r}
+library(faraway)
+library(lmtest)
+Disease_model = lm(Disease_Severity~ ., data = Disease_Data)
+summary(Disease_model)
+```
+
+Checking for a linear relationship
+
+H0:βi=0,i=1,2,...,20.
+
+H1: at least one of βj≠0,j=1,2,...,20.
+
+F = 17.19.
+
+P-value = 2.2e-16.
+
+Decision : Reject the null hypothesis at α=0.01.
+
+Conclusion: There is a linear relationship between disease severity and at least some of the predictor variables.
+
+In the original model, not all of the variables are significant at alpha = 0.05. The intercept is -3.40. If the coeffcient for a gene is negative, as the gene expression level for that gene increases the disease severity decreases as well. If the coeffcient for a gene is positive,as the gene expression level for that gene increases, the disease severity increases.  The r squared value is 56.11 so that means that 56.11% of the model explains all the variability of the response data around its mean.
+
+#**Model/variable selection**
+
+Use only significant variables at alpha = .05 from the first linear regression
+
+```{r}
+Disease_model_fitted = lm(Disease_Severity~ DLG5 + AF161342 + F2R + PHKG1 + PLEKHM1 + SMC2 + PSMB6 + A_24_P936373 + LOC440104, data = Disease_Data)
+summary(Disease_model_fitted)
+```
+
+Removing PHKG1 because not significant in this model, even though it was significant in the original model.
+
+```{r}
+Disease_model_fitted = lm(Disease_Severity~ DLG5 + AF161342 + F2R + PLEKHM1 + SMC2 + PSMB6 + A_24_P936373 + LOC440104, data = Disease_Data)
+summary(Disease_model_fitted)
+```
+Checking for a Linear Relationship.
+
+H0:βi=0,i=1,2,...,8.
+
+H1: at least one of βj≠0,j=1,2,...,8.
+
+F = 39.92.
+
+P-value = 2.2e-16.
+
+Decision : Reject the null hypothesis at alpha=0.05.
+
+Conclusion: There is a linear relationship between the disease severity and at least some of the predictor variables.
+
+
+In this model, all of the variables are significant at alpha = 0.05. The intercept is -1.8099. If the coeffcient for a gene is negative, as the gene expression level for that gene increases the disease severity decreases as well. If the coeffcient for a gene is positive,as the gene expression level for that gene increases, the disease severity increases.  The r squared value is 53.19 so that means that 53.19% of the model explains all the variability of the response data around its mean. This is less than the original model, normally we want a model that has a high R squared value. But I will use an ANOVA test to see which model is preferred.
+
+Use ANOVA to see which model to use
+```{r}
+anova(Disease_model_fitted,Disease_model)
+```
+
+H0:All of the Bi are = to 0.
+
+H1: at least one of βj≠0
+
+P-value = 0.1283.
+
+Decision : Do not reject the null hypothesis at alpha =0.05.
+
+Conclusion : The linear relationship between disease severity and the predictors is better explained with the second model.
+
+##**Model Diagnosis**
+Making sure model doesn't violate any assumptions of Linear Regression. I will be using an alpha value of 0.05 in all of my tests. We already checked if the model violated the assumption for linearity earlier.
+
+1. Homoscedasity
+```{r}
+bptest(Disease_model_fitted)
+```
+I'm using the Breusch-Pagan test to test for Homoscedasity.
+In this test the Null hypothesis is that the model's residuals are homoskedasticity. Because the p value(0.8828) is greater than my alpha value of 0.05. I fail to reject the null hypothesis.
+
+2. No Auto-Correlation
+
+I will use the Durbin-Watson test to test for auto-correlation
+
+```{r}
+library(car)
+durbinWatsonTest(Disease_model_fitted)
+```
+
+In the Durbin-Watson test,the null hypothesis is that there is no correlation among the residuals and they are independent. The alternative hypothesis is that the residuals are autocorrelated. Because the p value is 0.21 and greater than alpha, I fail to reject the null hypothesis.
+
+3. Little to no multicollinearity
+
+I'm using the variance inflation factor to check for multicollinearity. If the value of the variance inflation factor is greater than 10 there is an indication that multicollinearity may be present.
+
+```{r}
+vif(Disease_model_fitted)
+```
+Because none of the variance inflation factors are greater than 10 there is no presence of multicollinearity in the model.
+
+4. Normality
+```{r}
+shapiro.test(resid(Disease_model_fitted))
+```
+In the shapiro-Wilk test, The null hypothesis is that the sample came from a normally distributed population. Because the P value(2.2e^-16) is less than my alpha value of 0.05. I reject the null hypothesis.
+
+The only assumption that has been violated is normality.
+
+#Visualising the model
+
+```{r}
+par(mfrow=c(2,2)) 
+plot(Disease_model_fitted)
+```
+
+Based on the Residuals vs Fitted, and the Scale-Location graphs, we can see that homoscedasticity exists. The Q-Q plot shows that the model's residuals are not normally fit. The Residuals vs Leverage plot shows that there might be some outliers that should be removed.
+
+#Final Model
+
+I will use cook's distance to test for any outliers. Removing the outliers will help the model have residuals that are normally distributed.
+
+```{r}
+plot(cooks.distance(Disease_model_fitted), pch=23, bg='orange', cex=2, ylab="Cook's Distance")
+```
+
+From the plot of Cook's Distance, we can infer that a majority of the points have a cook's distance of less than 0.05. So points with a cooks distance of greater than .05 are outliers and should not be included. 
+
+I will check for any violations of the assumptions in the final model.
+
+```{r}
+final_data = 
+Disease_Data[which(cooks.distance(Disease_model_fitted) < 
+                       .05 / length(cooks.distance(Disease_model_fitted))),]
+final_model = lm(Disease_Severity~ DLG5 + AF161342 + F2R + PHKG1 + PLEKHM1 + SMC2 + PSMB6 + A_24_P936373 + LOC440104, data = final_data)
+summary(final_model)
+```
+The F stat for this model is 59.53. The p value is less than 2.2e-16. So there is a linear relationship between diesease severity and at least some of the predictor variables.
+
+H0:βi=0,i=1,2,...,8.
+
+H1: at least one of βj≠0,j=1,2,...,8.
+
+F = 59.53.
+
+P-value = < 2.2e-16.
+
+Decision : Reject the null hypothesis at alpha=0.05.
+
+Conclusion: There is a linear relationship between the disease severity and at least some of the predictor variables.
+
+
+I will check for any violations of the assumptions in the final model.
+
+1. Homoscedasity
+```{r}
+bptest(final_model)
+```
+I'm using the Breusch-Pagan test to test for Homoscedasity.
+In this test the Null hypothesis is that the residuals are homoskedasticity. Because the p value(.9259) is greater than my alpha value of 0.05. I fail to reject the null hypothesis.
+
+2. No Auto-Correlation
+
+I will use the Durbin-Watson test to test for auto-correlation
+
+```{r}
+library(car)
+durbinWatsonTest(final_model)
+```
+
+In the Durbin-Watson test,the null hypothesis is that there is no correlation among the residuals and they are independent. The alternative hypothesis is that the residuals are autocorrelated. Because the p value is 0.068 and greater than alpha, I fail to reject the null hypothesis.
+
+3. Little to no multicollinearity
+
+I'm using the variance inflation factor to check for multicollinearity. If the value of the variance inflation factor is greater than 10 there is an indication that multicollinearity may be present.
+
+```{r}
+vif(final_model)
+```
+Because none of the variance inflation factors are greater than 10 there is no presence of multicollinearity in the model.
+
+4. Normality
+```{r}
+shapiro.test(resid(final_model))
+```
+In the shapiro-Wilk test, The null hypothesis is that the sample came from a normally distributed population. Because the P value(0.46) is greater than my alpha value of 0.05. I fail to reject the null hypothesis.
+
+#Visualising the Final Model
+
+```{r}
+final_model = lm(Disease_Severity~ DLG5 + AF161342 + F2R + PLEKHM1 + SMC2 + PSMB6 + A_24_P936373 + LOC440104, data = final_data)
+par(mfrow = c(2, 2))
+plot(final_model)
+```
+
+The Residual vs Fitted plot and the Scale-Location plot show that there is no violation in the Homoscedasity assumption. The Q-Q plot shows that the residuals are normally distributed. The Residuals vs Leverage plot shows that there are no outliers. In my opinion this is the best model, it doesn't break any of the assumptions of linear regression and all of the predictor variables are significant.
+
+
+
